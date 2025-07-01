@@ -12,7 +12,6 @@ export default function Dashboard() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [showTaskForm, setShowTaskForm] = useState(false);
 
-
   // Queries
   const { data: vehicles = [], isLoading: vehiclesLoading } = useQuery<Vehicle[]>({
     queryKey: ["/api/vehicles"],
@@ -21,8 +20,6 @@ export default function Dashboard() {
   const { data: tasks = [], isLoading: tasksLoading } = useQuery<Task[]>({
     queryKey: ["/api/tasks"],
   });
-
-
 
   // Mutations
   const updateVehicleMutation = useMutation({
@@ -68,24 +65,15 @@ export default function Dashboard() {
     issues: vehicles.reduce((sum, v) => sum + (v.issues?.length || 0), 0),
     washed: vehicles.filter(v => v.washed).length,
     needsWash: vehicles.filter(v => !v.washed).length,
-  };
-
-  // Fuel stats
-  const fuelStats = {
-    totalCost: fuelRecords.reduce((sum, record) => sum + record.totalCost, 0),
-    avgCostPerGallon: fuelRecords.length > 0 
-      ? fuelRecords.reduce((sum, record) => sum + record.pricePerGallon, 0) / fuelRecords.length 
-      : 0,
-    lowFuelVehicles: vehicles.filter(v => v.fuelLevel < 25).length,
-    avgEfficiency: 15.5, // Mock value
+    lowFuel: vehicles.filter(v => v.fuelLevel < 25).length,
   };
 
   // Generate alerts
   const alerts = [];
-  if (fuelStats.lowFuelVehicles > 0) {
+  if (stats.lowFuel > 0) {
     alerts.push({
       type: 'warning',
-      message: `⚠️ ${fuelStats.lowFuelVehicles} vehicle(s) have low fuel levels`
+      message: `⚠️ ${stats.lowFuel} vehicle(s) have low fuel levels`
     });
   }
 
@@ -199,53 +187,6 @@ export default function Dashboard() {
     window.URL.revokeObjectURL(url);
   };
 
-  const handleGenerateFuelReport = () => {
-    if (fuelRecords.length === 0) {
-      alert('No fuel records to generate report');
-      return;
-    }
-
-    const totalCost = fuelRecords.reduce((sum, record) => sum + record.totalCost, 0);
-    const totalGallons = fuelRecords.reduce((sum, record) => sum + record.amount, 0);
-    const avgCostPerGallon = totalGallons > 0 ? totalCost / totalGallons : 0;
-
-    // Vehicle-specific data
-    const vehicleCosts: Record<string, { totalCost: number; totalGallons: number; recordCount: number }> = {};
-    fuelRecords.forEach(record => {
-      if (!vehicleCosts[record.vehicleName]) {
-        vehicleCosts[record.vehicleName] = {
-          totalCost: 0,
-          totalGallons: 0,
-          recordCount: 0
-        };
-      }
-      vehicleCosts[record.vehicleName].totalCost += record.totalCost;
-      vehicleCosts[record.vehicleName].totalGallons += record.amount;
-      vehicleCosts[record.vehicleName].recordCount++;
-    });
-
-    let reportContent = `Fuel Report - ${new Date().toLocaleDateString()}\n\n`;
-    reportContent += `Overall Statistics:\n`;
-    reportContent += `- Total Fuel Cost: $${totalCost.toFixed(2)}\n`;
-    reportContent += `- Total Gallons: ${totalGallons.toFixed(1)}\n`;
-    reportContent += `- Average Cost per Gallon: $${avgCostPerGallon.toFixed(2)}\n`;
-    reportContent += `- Total Records: ${fuelRecords.length}\n\n`;
-
-    reportContent += `Vehicle Breakdown:\n`;
-    Object.entries(vehicleCosts).forEach(([vehicle, data]) => {
-      reportContent += `- ${vehicle}: $${data.totalCost.toFixed(2)} (${data.totalGallons.toFixed(1)} gal, ${data.recordCount} records)\n`;
-    });
-
-    // Download as text file
-    const blob = new Blob([reportContent], { type: 'text/plain' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `rentxotic-fuel-report-${new Date().toISOString().split('T')[0]}.txt`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
-
   return (
     <div className="min-h-screen bg-[var(--bg-primary)]">
       {/* Header */}
@@ -262,7 +203,6 @@ export default function Dashboard() {
             <TabsTrigger value="dashboard" className="tab">Dashboard</TabsTrigger>
             <TabsTrigger value="fleet" className="tab">Fleet Status</TabsTrigger>
             <TabsTrigger value="tasks" className="tab">Task Management</TabsTrigger>
-            <TabsTrigger value="fuel" className="tab">Fuel Management</TabsTrigger>
           </TabsList>
 
           {/* Dashboard Tab */}
@@ -301,6 +241,10 @@ export default function Dashboard() {
               <div className="stat-card">
                 <span className="stat-number">{stats.issues}</span>
                 <div className="stat-label">Issues</div>
+              </div>
+              <div className="stat-card">
+                <span className="stat-number">{stats.lowFuel}</span>
+                <div className="stat-label">Low Fuel</div>
               </div>
             </div>
 
@@ -449,133 +393,6 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
-          </TabsContent>
-
-          {/* Fuel Management Tab */}
-          <TabsContent value="fuel" className="rentxotic-card">
-            <div className="section-header">
-              <h2 className="section-title">Fuel Management</h2>
-              <div className="flex gap-2">
-                <Button 
-                  onClick={() => setShowFuelRecordForm(true)}
-                  className="btn-rentxotic"
-                >
-                  ⛽ Add Fuel Record
-                </Button>
-                <Button 
-                  onClick={() => setShowFuelStationForm(true)}
-                  className="btn-rentxotic"
-                >
-                  🏪 Add Station
-                </Button>
-                <Button 
-                  onClick={handleGenerateFuelReport}
-                  className="btn-rentxotic"
-                >
-                  📊 Generate Report
-                </Button>
-              </div>
-            </div>
-
-            {/* Fuel Dashboard Stats */}
-            <div className="stats-grid">
-              <div className="stat-card">
-                <span className="stat-number">${Math.round(fuelStats.totalCost)}</span>
-                <div className="stat-label">Total Fuel Cost</div>
-              </div>
-              <div className="stat-card">
-                <span className="stat-number">${fuelStats.avgCostPerGallon.toFixed(2)}</span>
-                <div className="stat-label">Avg Cost/Gallon</div>
-              </div>
-              <div className="stat-card">
-                <span className="stat-number">{fuelStats.lowFuelVehicles}</span>
-                <div className="stat-label">Low Fuel Vehicles</div>
-              </div>
-              <div className="stat-card">
-                <span className="stat-number">{fuelStats.avgEfficiency}</span>
-                <div className="stat-label">Fleet Avg MPG</div>
-              </div>
-            </div>
-
-            {/* Fuel Alerts */}
-            {vehicles.filter(v => v.fuelLevel < 15).map((vehicle) => (
-              <div key={vehicle.id} className="alert alert-danger">
-                🚨 {vehicle.name} has critically low fuel ({vehicle.fuelLevel}%)
-              </div>
-            ))}
-            {vehicles.filter(v => v.fuelLevel >= 15 && v.fuelLevel < 25).map((vehicle) => (
-              <div key={vehicle.id} className="alert alert-warning">
-                ⚠️ {vehicle.name} has low fuel ({vehicle.fuelLevel}%)
-              </div>
-            ))}
-
-            {showFuelRecordForm && (
-              <FuelRecordForm
-                vehicles={vehicles}
-                fuelStations={fuelStations}
-                onClose={() => setShowFuelRecordForm(false)}
-                onSuccess={() => {
-                  setShowFuelRecordForm(false);
-                  queryClient.invalidateQueries({ queryKey: ["/api/fuel-records"] });
-                  queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
-                }}
-              />
-            )}
-
-            {showFuelStationForm && (
-              <FuelStationForm
-                onClose={() => setShowFuelStationForm(false)}
-                onSuccess={() => {
-                  setShowFuelStationForm(false);
-                  queryClient.invalidateQueries({ queryKey: ["/api/fuel-stations"] });
-                }}
-              />
-            )}
-
-            {/* Fuel Stations */}
-            <div className="mb-8">
-              <h3 className="text-xl font-bold text-[var(--text-primary)] mb-4">Fuel Stations</h3>
-              {stationsLoading ? (
-                <div>Loading stations...</div>
-              ) : (
-                <div className="fuel-grid">
-                  {fuelStations.map((station) => (
-                    <FuelStationCard
-                      key={station.id}
-                      station={station}
-                      onUpdate={() => queryClient.invalidateQueries({ queryKey: ["/api/fuel-stations"] })}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Recent Fuel Records */}
-            <div>
-              <h3 className="text-xl font-bold text-[var(--text-primary)] mb-4">Recent Fuel Records</h3>
-              {recordsLoading ? (
-                <div>Loading records...</div>
-              ) : fuelRecords.length === 0 ? (
-                <div className="fuel-record-card text-center">
-                  <h4 className="text-lg font-semibold text-[var(--text-secondary)] mb-2">No Fuel Records</h4>
-                  <p className="text-sm text-[var(--text-muted)]">Add your first fuel record to start tracking</p>
-                </div>
-              ) : (
-                <div className="fuel-records-grid">
-                  {fuelRecords.slice(0, 10).map((record) => (
-                    <FuelRecordCard
-                      key={record.id}
-                      record={record}
-                      onDelete={() => {
-                        apiRequest("DELETE", `/api/fuel-records/${record.id}`).then(() => {
-                          queryClient.invalidateQueries({ queryKey: ["/api/fuel-records"] });
-                        });
-                      }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
           </TabsContent>
         </Tabs>
       </div>
